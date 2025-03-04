@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: services/color-formatters.js</title>
+    <title>JSDoc: Source: services/winget/version.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: services/color-formatters.js</h1>
+    <h1 class="page-title">Source: services/winget/version.js</h1>
 
     
 
@@ -27,190 +27,177 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Commonly-used functions for determining the colour to use for a badge,
- * including colours based off download count, version number, etc.
+ * Comparing versions with winget's version comparator.
+ *
+ * See https://github.com/microsoft/winget-cli/blob/ae566c7bf21cfcc75be7ec30e4036a30eede8396/src/AppInstallerSharedLib/Versions.cpp for original implementation.
  *
  * @module
  */
 
-import pep440 from '@renovatebot/pep440'
-
 /**
- * Determines the color used for a badge based on version.
+ * Compares two strings representing version numbers lexicographically and returns an integer value.
  *
- * @param {string|number} version Version used for determining badge color
- * @returns {string} Badge color
+ * @param {string} v1 - The first version to compare
+ * @param {string} v2 - The second version to compare
+ * @returns {number} -1 if v1 is smaller than v2, 1 if v1 is larger than v2, 0 if v1 and v2 are equal
+ * @example
+ * compareVersion('1.2.3', '1.2.4') // returns -1 because numeric part of first version is smaller than the numeric part of second version.
  */
-function version(version) {
-  if (typeof version !== 'string' &amp;&amp; typeof version !== 'number') {
-    throw new Error(`Can't generate a version color for ${version}`)
-  }
-  version = `${version}`
-  let first = version[0]
-  if (first === 'v') {
-    first = version[1]
-  }
-  if (
-    first === '0' ||
-    /alpha|beta|snapshot|dev|pre|rc|scm|cvs/i.test(version)
-  ) {
-    return 'orange'
-  } else {
-    return 'blue'
-  }
-}
+function compareVersion(v1, v2) {
+  // https://github.com/microsoft/winget-cli/blob/ae566c7bf21cfcc75be7ec30e4036a30eede8396/src/AppInstallerSharedLib/Versions.cpp#L109-L173
+  // This implementation does not parse s_Approximate_Greater_Than
+  // and s_Approximate_Less_Than since they won't appear in directory name (package version parsed by shields.io)
+  const v1Trimmed = trimPrefix(v1)
+  const v2Trimmed = trimPrefix(v2)
 
-/**
- * Determines the color used for a badge based on PEP440 versioning.
- *
- * @param {string|number} version Version used for determining badge color
- * @returns {string} Badge color
- */
-function pep440VersionColor(version) {
-  if (!pep440.valid(version)) {
-    return 'lightgrey'
-  }
-  const parsedVersion = pep440.explain(version)
-  if (parsedVersion.is_prerelease || parsedVersion.public.startsWith('0.')) {
-    return 'orange'
-  }
-  return 'blue'
-}
+  const v1Latest = v1Trimmed.trim().toLowerCase() === 'latest'
+  const v2Latest = v2Trimmed.trim().toLowerCase() === 'latest'
 
-/**
- * Determines the color used for a badge by comparing the value and floor count values.
- * The color can vary from red to bright green depending on the range the value lies in.
- * Decreasing the value will shift the color towards red.
- * Increasing the value will shift the color towards bright green.
- *
- * @param {number} value Current value
- * @param {number} yellow Yellow color threshold, should be greater than 0
- * @param {number} yellowgreen Yellowgreen color threshold, should be greater than yellow
- * @param {number} green Green color threshold, should be greater than yellowgreen
- * @returns {string} Badge color
- */
-function floorCount(value, yellow, yellowgreen, green) {
-  if (value &lt;= 0) {
-    return 'red'
-  } else if (value &lt; yellow) {
-    return 'yellow'
-  } else if (value &lt; yellowgreen) {
-    return 'yellowgreen'
-  } else if (value &lt; green) {
-    return 'green'
-  } else {
-    return 'brightgreen'
-  }
-}
-
-/**
- * Determines the color used for a badge by comparing the download count and floor values.
- * The color varies from red to bright green as the download count increases.
- *
- * @param {number} downloads Download count
- * @returns {string} Badge color
- */
-function downloadCount(downloads) {
-  return floorCount(downloads, 10, 100, 1000)
-}
-
-/**
- * Determines the color used for a badge by comparing percentage and floor values.
- * The color varies from red to bright green as the percentage increases.
- *
- * @param {number} percentage Percentage value
- * @returns {string} Badge color
- */
-function coveragePercentage(percentage) {
-  return floorCount(percentage, 80, 90, 100)
-}
-
-/**
- * Determines the color used for a badge by matching score with grade values.
- * The color varies from bright green to red as the score decreases.
- * The score can be one of the following grade value: ['A', 'B', 'C', 'D', 'E'].
- * The color defaults to red if the score does not matches with any of the grade values.
- *
- * @param {string} score Score value
- * @returns {string} Badge color
- */
-function letterScore(score) {
-  if (score === 'A') {
-    return 'brightgreen'
-  } else if (score === 'B') {
-    return 'green'
-  } else if (score === 'C') {
-    return 'yellowgreen'
-  } else if (score === 'D') {
-    return 'yellow'
-  } else if (score === 'E') {
-    return 'orange'
-  } else {
-    return 'red'
-  }
-}
-
-/**
- * Creates a callback function that determines badge color from the colors array.
- * If the colors array is provided then for n steps, there should be n + 1 color.
- * If the colors array is not provided then it is chosen from the default colors array
- * according to the size of the steps array.
- *
- * @param {number[]} steps Steps array
- * @param {string[]} colors Colors array. If provided, should be of length steps.length + 1
- * @param {boolean} reversed If true then the colors array will be considered in reverse order
- * @returns {function(number): string} Function that finds the step index by comparing value
- * with steps array and returns color from colors array for the corresponding step index
- */
-function colorScale(steps, colors, reversed) {
-  if (steps === undefined) {
-    throw Error('When invoking colorScale, steps should be provided.')
+  if (v1Latest &amp;&amp; v2Latest) {
+    return 0
+  } else if (v1Latest) {
+    return 1
+  } else if (v2Latest) {
+    return -1
   }
 
-  const defaultColors = {
-    1: ['red', 'brightgreen'],
-    2: ['red', 'yellow', 'brightgreen'],
-    3: ['red', 'yellow', 'green', 'brightgreen'],
-    4: ['red', 'yellow', 'yellowgreen', 'green', 'brightgreen'],
-    5: ['red', 'orange', 'yellow', 'yellowgreen', 'green', 'brightgreen'],
+  const v1Unknown = v1Trimmed.trim().toLowerCase() === 'unknown'
+  const v2Unknown = v2Trimmed.trim().toLowerCase() === 'unknown'
+
+  if (v1Unknown &amp;&amp; v2Unknown) {
+    return 0
+  } else if (v1Unknown) {
+    return -1
+  } else if (v2Unknown) {
+    return 1
   }
 
-  if (typeof colors === 'undefined') {
-    if (steps.length in defaultColors) {
-      colors = defaultColors[steps.length]
-    } else {
-      throw Error(`No default colors for ${steps.length} steps.`)
+  const parts1 = v1Trimmed.split('.')
+  const parts2 = v2Trimmed.split('.')
+
+  trimLastZeros(parts1)
+  trimLastZeros(parts2)
+
+  for (let i = 0; i &lt; Math.min(parts1.length, parts2.length); i++) {
+    const part1 = parts1[i]
+    const part2 = parts2[i]
+
+    const compare = compareVersionPart(part1, part2)
+    if (compare !== 0) {
+      return compare
     }
   }
 
-  if (steps.length !== colors.length - 1) {
-    throw Error(
-      'When colors are provided, there should be n + 1 colors for n steps.',
-    )
+  if (parts1.length === parts2.length) {
+    return 0
   }
 
-  if (reversed) {
-    colors = Array.from(colors).reverse()
+  if (parts1.length > parts2.length) {
+    return 1
+  } else if (parts1.length &lt; parts2.length) {
+    return -1
   }
 
-  return value => {
-    const stepIndex = steps.findIndex(step => value &lt; step)
+  return 0
+}
 
-    // For the final step, stepIndex is -1, so in all cases this expression
-    // works swimmingly.
-    return colors.slice(stepIndex)[0]
+/**
+ * Removes all leading non-digit characters from a version number string
+ * if there is a digit before the split character, or no split characters exist.
+ *
+ * @param {string} version The version number string to trim
+ * @returns {string} The version number string with all leading non-digit characters removed
+ */
+function trimPrefix(version) {
+  // https://github.com/microsoft/winget-cli/blob/ae566c7bf21cfcc75be7ec30e4036a30eede8396/src/AppInstallerSharedLib/Versions.cpp#L66
+  // If there is a digit before the split character, or no split characters exist, trim off all leading non-digit characters
+
+  const digitPos = version.match(/(\d.*)/)
+  const splitPos = version.match(/\./)
+  if (digitPos &amp;&amp; (splitPos == null || digitPos.index &lt; splitPos.index)) {
+    // there is digit before the split character so strip off all leading non-digit characters
+    return version.slice(digitPos.index)
+  }
+  return version
+}
+
+/**
+ * Removes all trailing zeros from a version number part array.
+ *
+ * @param {string[]} parts - parts
+ */
+function trimLastZeros(parts) {
+  while (parts.length > 1 &amp;&amp; parts[parts.length - 1].trim() === '0') {
+    parts.pop()
   }
 }
 
-export {
-  colorScale,
-  coveragePercentage,
-  downloadCount,
-  floorCount,
-  letterScore,
-  pep440VersionColor,
-  version,
+/**
+ * Compares two strings representing version number parts lexicographically and returns an integer value.
+ *
+ * @param {string} part1 - The first version part to compare
+ * @param {string} part2 - The second version part to compare
+ * @returns {number} -1 if part1 is smaller than part2, 1 if part1 is larger than part2, 0 if part1 and part2 are equal
+ * @example
+ * compareVersionPart('3', '4') // returns -1 because numeric part of first part is smaller than the numeric part of second part.
+ */
+function compareVersionPart(part1, part2) {
+  // https://github.com/microsoft/winget-cli/blob/ae566c7bf21cfcc75be7ec30e4036a30eede8396/src/AppInstallerSharedLib/Versions.cpp#L324-L352
+  const [, numericString1, other1] = part1.trim().match(/^(\d*)(.*)$/)
+  const [, numericString2, other2] = part2.trim().match(/^(\d*)(.*)$/)
+  const numeric1 = parseInt(numericString1 || '0', 10)
+  const numeric2 = parseInt(numericString2 || '0', 10)
+
+  if (numeric1 &lt; numeric2) {
+    return -1
+  } else if (numeric1 > numeric2) {
+    return 1
+  }
+  // numeric1 === numeric2
+
+  const otherFolded1 = (other1 ?? '').toLowerCase()
+  const otherFolded2 = (other2 ?? '').toLowerCase()
+
+  if (otherFolded1.length !== 0 &amp;&amp; otherFolded2.length === 0) {
+    return -1
+  } else if (otherFolded1.length === 0 &amp;&amp; otherFolded2.length !== 0) {
+    return 1
+  }
+
+  if (otherFolded1 &lt; otherFolded2) {
+    return -1
+  } else if (otherFolded1 > otherFolded2) {
+    return 1
+  }
+
+  return 0
 }
+
+/**
+ * Finds the largest version number lexicographically from an array of strings representing version numbers and returns it as a string.
+ *
+ * @param {string[]} versions - The array of version numbers to compare
+ * @returns {string|undefined} The largest version number as a string, or undefined if the array is empty
+ * @example
+ * latest(['1.2.3', '1.2.4', '1.3', '2.0']) // returns '2.0' because it is the largest version number.
+ * latest(['1.2.3', '1.2.4', '1.3-alpha', '2.0-beta']) // returns '2.0-beta'. there is no special handling for pre-release versions.
+ */
+function latest(versions) {
+  const len = versions.length
+  if (len === 0) {
+    return
+  }
+
+  let version = versions[0]
+  for (let i = 1; i &lt; len; i++) {
+    if (compareVersion(version, versions[i]) &lt;= 0) {
+      version = versions[i]
+    }
+  }
+  return version
+}
+
+export { latest, compareVersion }
 </code></pre>
         </article>
     </section>
